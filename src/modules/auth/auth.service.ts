@@ -8,6 +8,8 @@ import { ILoginUser } from "./auth.interface";
 const loginUser = async (payload : ILoginUser) => {
     const { email, password } = payload;
 
+    console.log(email, password, 'from auth.service')
+
     const user = await prisma.user.findUniqueOrThrow({
         where : {email}
     })

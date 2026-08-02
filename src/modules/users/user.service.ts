@@ -40,8 +40,6 @@ const userCreateIntoDatabase = async (userData: IUser) => {
 
     return result;
 
-
-
 }
 
 const userGetById = async (id: string) => {
