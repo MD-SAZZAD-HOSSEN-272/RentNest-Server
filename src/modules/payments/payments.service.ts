@@ -8,7 +8,7 @@ const createPayment = async (tenantId: string, payload: IPaymentRequest) => {
 
     const rentalRequest = await prisma.rentalRequest.findUnique({
         where: { id: rentalRequestId },
-        include: { property: true }
+        include: { property: true, payment: true }
     });
 
     if (!rentalRequest) {
@@ -17,6 +17,10 @@ const createPayment = async (tenantId: string, payload: IPaymentRequest) => {
 
     if (rentalRequest.tenantId !== tenantId) {
         throw new Error("You are not allowed to pay for this rental request");
+    }
+
+    if (rentalRequest.payment?.status === "COMPLETED") {
+        throw new Error("This rental request has already been paid for");
     }
 
     const paymentData = {
@@ -77,15 +81,30 @@ const createPayment = async (tenantId: string, payload: IPaymentRequest) => {
     }
 
 
-    const payment = await prisma.payment.create({
-        data: {
-            transactionId,
-            rentalRequestId,
-            amount,
-            provider,
-            status: "PENDING",
-        }
-    });
+    // A rental request can only ever have one Payment row (unique rentalRequestId).
+    // If an earlier attempt was cancelled/failed, re-use that row for the retry
+    // instead of trying to create a second one.
+    const payment = rentalRequest.payment
+        ? await prisma.payment.update({
+              where: { rentalRequestId },
+              data: {
+                  transactionId,
+                  amount,
+                  provider,
+                  status: "PENDING",
+                  paidAt: null,
+                  valId: null,
+              },
+          })
+        : await prisma.payment.create({
+              data: {
+                  transactionId,
+                  rentalRequestId,
+                  amount,
+                  provider,
+                  status: "PENDING",
+              },
+          });
 
     return {
         payment,
@@ -97,7 +116,7 @@ const confirmPayment = async (payload : any) => {
 
     console.log("Payment confirmation payload:", payload);
 
-    const { tran_id, val_id } = payload 
+    const { tran_id, val_id } = payload
 
 
     const payment = await prisma.payment.findUnique({
@@ -115,6 +134,40 @@ const confirmPayment = async (payload : any) => {
             paidAt: new Date(),
             valId: val_id
         }
+    });
+};
+
+const failPayment = async (payload: any) => {
+    const { tran_id } = payload;
+
+    const payment = await prisma.payment.findUnique({
+        where: { transactionId: tran_id },
+    });
+
+    if (!payment) {
+        throw new Error("Payment not found");
+    }
+
+    return prisma.payment.update({
+        where: { transactionId: tran_id },
+        data: { status: "FAILED" },
+    });
+};
+
+const cancelPayment = async (payload: any) => {
+    const { tran_id } = payload;
+
+    const payment = await prisma.payment.findUnique({
+        where: { transactionId: tran_id },
+    });
+
+    if (!payment) {
+        throw new Error("Payment not found");
+    }
+
+    return prisma.payment.update({
+        where: { transactionId: tran_id },
+        data: { status: "FAILED" },
     });
 };
 
@@ -162,6 +215,8 @@ const getPaymentById = async (paymentId: string, userId: string, role: string) =
 export const paymentsService = {
     createPayment,
     confirmPayment,
+    failPayment,
+    cancelPayment,
     getPayments,
     getPaymentById
 };
