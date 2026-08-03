@@ -15,7 +15,11 @@ import { adminRoutes } from "./modules/admin/admin.route";
 
 const app : Application = express();
 
-app.use(cors())
+app.use(cors({
+    origin: [process.env.NODE_ENV === "production" ? "https://rent-nest-app.vercel.app" : "http://localhost:3000"],
+    credentials: true,
+}))
+
 
 
 
