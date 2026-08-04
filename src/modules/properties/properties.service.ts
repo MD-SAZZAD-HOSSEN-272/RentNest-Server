@@ -11,11 +11,7 @@ const getAllProperties = async (query: Record<string, unknown>) => {
   const maxPrice =
     typeof query.maxPrice === "string" ? Number(query.maxPrice) : undefined;
 
-  const filters: any = {
-    available: true,
-  };
-
-  console.log("category:", category);
+  const filters: any = {};
 
   if (location) {
     filters.location = {
@@ -178,6 +174,17 @@ const deleteProperty = async (propertyId: string, landlordId: string) => {
 
   if (property.landlordId !== landlordId) {
     throw new Error("You are not allowed to delete this property");
+  }
+
+  const [rentalRequestCount, reviewCount] = await Promise.all([
+    prisma.rentalRequest.count({ where: { propertyId } }),
+    prisma.review.count({ where: { propertyId } }),
+  ]);
+
+  if (rentalRequestCount > 0 || reviewCount > 0) {
+    throw new Error(
+      "This property has rental request or review history and cannot be deleted. Mark it unavailable instead."
+    );
   }
 
   await prisma.property.delete({
